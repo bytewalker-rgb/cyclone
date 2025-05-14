@@ -109,7 +109,7 @@ std::vector<uint64_t> bigNumSubtract(const std::vector<uint64_t>& a, const std::
             borrow = 0ULL;
         }
     }
-    
+
     for (size_t i = b.size(); i < diff.size() && borrow; ++i) {
         if (diff[i] == 0ULL) {
             diff[i] = ~0ULL;
@@ -300,7 +300,8 @@ static void computeHash160BatchBinSingle(int numKeys,
 
 //------------------------------------------------------------------------------
 static void printUsage(const char* programName) {
-    std::cerr << "Usage: " << programName << " -a <Base58_P2PKH> -r <START:END>\n";
+    std::cerr << "Usage: " << programName << " -a <Base58_P2PKH> -r <START:END> [-R]\n"
+              << "  -R: Enable random traversal mode within the specified range\n";
 }
 
 static std::string formatElapsedTime(double seconds) {
@@ -318,11 +319,13 @@ static std::string formatElapsedTime(double seconds) {
 static void printStatsBlock(int numCPUs, const std::string &targetAddr,
                             const std::string &rangeStr, double mkeysPerSec,
                             unsigned long long totalChecked, double elapsedTime,
-                            int progressSaves, long double progressPercent)
+                            int progressSaves, long double progressPercent,
+                            bool randomMode = false)
 {
     static bool firstPrint = true;
     if (!firstPrint) {
-        std::cout << "\033[9A";
+        // Move cursor up 9 lines in normal mode, 10 lines in random mode
+        std::cout << (randomMode ? "\033[10A" : "\033[9A");
     } else {
         firstPrint = false;
     }
@@ -333,7 +336,11 @@ static void printStatsBlock(int numCPUs, const std::string &targetAddr,
     std::cout << "Total Checked : " << totalChecked << "\n";
     std::cout << "Elapsed Time  : " << formatElapsedTime(elapsedTime) << "\n";
     std::cout << "Range         : " << rangeStr << "\n";
-    std::cout << "Progress      : " << std::fixed << std::setprecision(4) << progressPercent << " %\n";
+    if (!randomMode) {
+        std::cout << "Progress      : " << std::fixed << std::setprecision(4) << progressPercent << " %\n";
+    } else {
+        std::cout << "Mode          : Random Traversal\n";
+    }
     std::cout << "Progress Save : " << progressSaves << "\n";
     std::cout.flush();
 }
@@ -349,7 +356,7 @@ static std::vector<ThreadRange> g_threadRanges;
 //------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
-    bool addressProvided = false, rangeProvided = false;
+    bool addressProvided = false, rangeProvided = false, randomMode = false;
     std::string targetAddress, rangeInput;
     std::vector<uint8_t> targetHash160;
 
@@ -368,6 +375,8 @@ int main(int argc, char* argv[])
         } else if (!std::strcmp(argv[i], "-r") && i + 1 < argc) {
             rangeInput = argv[++i];
             rangeProvided = true;
+        } else if (!std::strcmp(argv[i], "-R")) {
+            randomMode = true;
         } else {
             std::cerr << "Unknown parameter: " << argv[i] << "\n";
             printUsage(argv[0]);
@@ -416,7 +425,7 @@ int main(int argc, char* argv[])
     rangeSize = bigNumAdd(rangeSize, singleElementVector(1ULL));
 
     const std::string rangeSizeHex = bigNumToHex(rangeSize);
-    
+
     const long double totalRangeLD = hexStrToLongDouble(rangeSizeHex);
 
     const int numCPUs = omp_get_num_procs();
@@ -454,12 +463,18 @@ int main(int argc, char* argv[])
     Secp256K1 secp;
     secp.Init();
 
+    // Initialize random number generator if random mode is enabled
+    if (randomMode) {
+        // Use current time as seed for random generator
+        rseed(static_cast<unsigned long>(std::chrono::high_resolution_clock::now().time_since_epoch().count()));
+    }
+
     // PARRALEL COMPUTING BLOCK
     #pragma omp parallel num_threads(numCPUs) \
       shared(globalComparedCount, globalElapsedTime, mkeysPerSec, matchFound, \
              foundPrivateKeyHex, foundPublicKeyHex, foundWIF, \
              tStart, lastStatusTime, lastSaveTime, g_progressSaveCount, \
-             g_threadPrivateKeys)
+             g_threadPrivateKeys, randomMode)
     {
         const int threadId = omp_get_thread_num();
 
@@ -477,7 +492,7 @@ int main(int argc, char* argv[])
         std::vector<Point> minusPoints(POINTS_BATCH_SIZE);
         for (int i = 0; i < POINTS_BATCH_SIZE; i++) {
             Int tmp; tmp.SetInt32(i);
-            Point p = secp.ComputePublicKey(&tmp); 
+            Point p = secp.ComputePublicKey(&tmp);
             plusPoints[i] = p;
             p.y.ModNeg();
             minusPoints[i] = p;
@@ -631,7 +646,36 @@ int main(int argc, char* argv[])
             }
 
             // Next step
-            {
+            if (randomMode) {
+                // Generate a truly random private key within the thread's range
+                // Get the start and end of the range for this thread
+                std::string startHex = g_threadRanges[threadId].startHex;
+                std::string endHex = g_threadRanges[threadId].endHex;
+
+                // Convert to Int objects
+                Int rangeStart = hexToInt(startHex);
+                Int rangeEnd = hexToInt(endHex);
+
+                // Calculate range width
+                Int rangeWidth;
+                rangeWidth.Set(&rangeEnd);
+                rangeWidth.Sub(&rangeStart);
+
+                // Generate a random number within the range
+                Int randomOffset;
+                // Use the full bit length of the range for the random number
+                randomOffset.Rand(rangeWidth.GetBitLength());
+
+                // Make sure it's within our range
+                if (intGreater(randomOffset, rangeWidth)) {
+                    randomOffset.Mod(&rangeWidth);
+                }
+
+                // Set the private key to start + random offset
+                privateKey.Set(&rangeStart);
+                privateKey.Add(&randomOffset);
+            } else {
+                // Sequential traversal
                 Int step;
                 step.SetInt32(fullBatchSize - 2); // 510
                 privateKey.Add(&step);
@@ -655,7 +699,7 @@ int main(int argc, char* argv[])
                     printStatsBlock(numCPUs, targetAddress, displayRange,
                                     mkeysPerSec, globalComparedCount,
                                     globalElapsedTime, g_progressSaveCount,
-                                    progressPercent);
+                                    progressPercent, randomMode);
                     lastStatusTime = now;
                 }
             }

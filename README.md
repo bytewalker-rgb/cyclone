@@ -16,6 +16,7 @@ I extend our gratitude to Jean-Luc Pons for his foundational contributions to th
 - **Probabilistik search**: You can add -j key and jump forward after partial match between generated Hash160 and given Hash160
 - **Partial match**: You can add -p key and save all of the partial match Hash160 to the candidates.txt file
 - **Save candidates**: Only when -s key is add.
+- **Random traversal**: You can add -R key to enable random traversal within the specified range (AVX512 version only).
 
 ---
 
@@ -41,12 +42,12 @@ I extend our gratitude to Jean-Luc Pons for his foundational contributions to th
 | **Cyclone AVX2**   | 139             | Computing 8 hash160 per batch                                                              |
 | **Cyclone AVX512** | 159             | Computing 16 hash160 per batch                                                             |
 
-- **NB!** The Windows version of Cyclone performs 6–8% slower than the Linux version! 
+- **NB!** The Windows version of Cyclone performs 6–8% slower than the Linux version!
 
 ---
 ## 🔷 Example Output
 
-Below is an example of Cyclone in action, solving a Satoshi puzzle:  
+Below is an example of Cyclone in action, solving a Satoshi puzzle:
 **Sequrntial search**
 ```bash
 root@ubuntu:/mnt/hgfs/VM/Final Cyclone# ./Cyclone -a 128z5d7nN7PkCuX5qoA4Ys6pmxUYnEy86k -r 875:6FAC3875
@@ -89,6 +90,25 @@ Public Key    : 031A864BAE3922F351F1B57CFDD827C25B7E093CB9C88A72C1CD893D9F90F44E
 WIF           : KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7wBBz2KJQdASx
 P2PKH Address : 128z5d7nN7PkCuX5qoA4Ys6pmxUYnEy86k
 
+```
+
+**Random traversal mode**
+```bash
+root@ubuntu:/mnt/cyclone# ./Cyclone -a 128z5d7nN7PkCuX5qoA4Ys6pmxUYnEy86k -r 875:6FAC3875 -R
+================= WORK IN PROGRESS =================
+Target Address: 128z5d7nN7PkCuX5qoA4Ys6pmxUYnEy86k
+CPU Threads   : 32
+Mkeys/s       : 159.34
+Total Checked : 2389516288
+Elapsed Time  : 00:00:15
+Range         : 875:6fac3875
+Mode          : Random Traversal
+Progress Save : 0
+================== FOUND MATCH! ==================
+Private Key   : 0000000000000000000000000000000000000000000000000000000006AC3875
+Public Key    : 031A864BAE3922F351F1B57CFDD827C25B7E093CB9C88A72C1CD893D9F90F44ECE
+WIF           : KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7wBBz2KJQdASx
+P2PKH Address : 128z5d7nN7PkCuX5qoA4Ys6pmxUYnEy86k
 ```
 **Partial match saving**
 ```bash
@@ -164,9 +184,10 @@ To compile the program, you need MinGW (Minimalist GNU for Windows): **sudo apt 
 For instructions on how to compile the program in Linux for Windows (via MinGW), refer to the top of the file Cyclone.cpp.
 
 ## 🚧**VERSIONS**
-**V1.3**: Added the -s key to save candidates into the candidates.txt file. Added Hash160 to the statistics output  (AVX2 version!)  
-**V1.2**: Added keys: -p (partial match -> writes to the candidates.txt file, example -p 6 (comparison of the first 6 HEX) and -j (jump forward after partial match, example -j 1000000) (AVX2 version!)  
-**V1.1**: Speed up to 20% (AVX2 version!)  
+**V1.4**: Added the -R key to enable random traversal within the specified range (AVX512 version only)
+**V1.3**: Added the -s key to save candidates into the candidates.txt file. Added Hash160 to the statistics output  (AVX2 version!)
+**V1.2**: Added keys: -p (partial match -> writes to the candidates.txt file, example -p 6 (comparison of the first 6 HEX) and -j (jump forward after partial match, example -j 1000000) (AVX2 version!)
+**V1.1**: Speed up to 20% (AVX2 version!)
 **V1.0**: Release
 
 ## ✌️**TIPS**
